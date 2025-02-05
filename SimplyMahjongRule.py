@@ -15,13 +15,18 @@ class SimplyMahjongRule(object):
 
         self.ruleName = ''
 
-        self.mahjongBox = None
+        #self.mahjongBox = None
+        self.mahjongBoxName = None
 
         self.jokerDefineNameGroup = None
 
         self.normalSuitGroup = None
 
         self.openTypeGroup = None
+
+        self.mahjongBoxLimitNum = -1
+
+        self.mahjongListenLimitNum = -1
 
     # 設定玩法名稱
     # ruleName: 玩法名稱
@@ -41,6 +46,19 @@ class SimplyMahjongRule(object):
         self.normalSuitGroup = MCD.conGameRuleMap[ self.ruleName ][ 'normalSuitGroup' ]
 
         self.openTypeGroup = MCD.conGameRuleMap[ self.ruleName ][ 'openTypeGroup' ]
+
+        return  0
+
+
+    # 設定其他運作參數
+    def setParameter( self, mahjongBoxLimitNum, mahjongListenLimitNum ):
+        # 牌盒剩下多少張時 , 能胡就胡
+        self.mahjongBoxLimitNum = mahjongBoxLimitNum
+
+        self.mahjongListenLimitNum = mahjongListenLimitNum
+
+        return  0
+        
 
     # 判斷麻將牌章是否合法
     def checkMahjongNameIsLegal( self, mahjongName, allowEmptyFlag ):
@@ -239,11 +257,13 @@ class SimplyMahjongRule(object):
 
 
 
-    # 尋找手上牌是否有能槓就槓的牌章(只限萬筒索與字牌)
-    def findOnHandKongMahjong( self, mahjongCountGroup ):
+    # 尋找手上牌是否有能槓就槓的牌章(暗槓或碰牌加槓)(只限萬筒索與字牌)
+    def findOnHandKongMahjong( self, mahjongCountGroup, openMahjongInfo=None ):
 
         retData = { 'actType':None, 'actMahjongName':None }
 
+        # ----------------------------------------------------------------------
+        # 檢查手上牌是否可以暗槓
         for i in range( len( mahjongCountGroup ) ):
 
             mahjongName = MCD.IndexToMjName[ i ]
@@ -255,34 +275,47 @@ class SimplyMahjongRule(object):
                 continue
 
             if mahjongCountGroup[ i ] == 4:
-                retData[ 'actType' ] = MCD.OPEN_KONG
+                retData[ 'actType' ] = MCD.OPEN_CONCEALED_KONG      # 暗槓
                 retData[ 'actMahjongName' ] = mahjongName
                 return  retData
 
+        # ----------------------------------------------------------------------
+        # 檢查手上牌是否可以碰牌加槓
+        for openMahjongData in openMahjongInfo:
+
+            openType = openMahjongData['openType']
+
+            if openType == MCD.OPEN_PONG:   # 碰牌
+
+                pongMahjong = openMahjongData['mahjong']
+
+                index = MCD.mapMahjongNameToIndex[ pongMahjong ]
+
+                if mahjongCountGroup[ index ] > 0:
+                    retData[ 'actType' ] = MCD.OPEN_ADD_KONG        # 碰牌加槓
+                    retData[ 'actMahjongName' ] = pongMahjong
+                    return  retData
+
+        # ----------------------------------------------------------------------
+
         return  retData
+    
+    
 
-        
-
-    # 前提:能槓就槓, 摸進牌後, 能進行碰牌加槓或暗槓
-    # 取得摸牌後, 要進行何種動作 (捨牌)   
+    # 確認自身摸進牌後, 要進行何種動作 (捨牌/槓牌/碰牌加槓/胡牌)
+    # 內部判斷 : 能槓就槓, 摸進牌後, 能進行碰牌加槓或暗槓 , 就先執行
     # onHandMahjong: 手上的牌
     # takeMahjong: 摸進的牌
     # openMahjongInfo: 吃碰槓的資訊(List)
     # [
-    #    { openType:OPEN_PONG, mahjong:'A01' },              -- 碰1萬
-    #    { openType:OPEN_KONG, mahjong:'A02' },              -- 明槓2萬
-    #    { openType:OPEN_CONCEALED_KONG, mahjong:'B05' },    -- 暗槓5筒
-    #    { openType:OPEN_CHOW, sequence:'C01', mahjong:'C02' },       -- 吃牌組合為 123索, 用13索,吃2索
-    #    { openType:OPEN_CHOW, sequence:'C01', mahjong:'C01' },       -- 吃牌組合為 123索, 用23索,吃1索
-    #    { openType:OPEN_CHOW, sequence:'C01', mahjong:'C03' },       -- 吃牌組合為 123索, 用12索,吃3索
-    #    { openType:OPEN_CHOW, sequence:'C07', mahjong:'C07' },       -- 吃牌組合為 789索, 用89索,吃7索
-    #    { openType:OPEN_CHOW, sequence:'C07', mahjong:'C09' },       -- 吃牌組合為 789索, 用78索,吃9索    
-    #    { openType:OPEN_CHOW, sequence:'B04', mahjong:'B04' },       -- 吃牌組合為 456筒, 用56筒,吃9筒
-    #    { openType:OPEN_CHOW, sequence:'B04', mahjong:'B05' },       -- 吃牌組合為 456筒, 用46筒,吃5筒
-    #    { openType:OPEN_CHOW, sequence:'B04', mahjong:'B06' },       -- 吃牌組合為 456筒, 用45筒,吃6筒
+    #    { openType:OPEN_PONG, mahjong:'A01' },                 -- 碰1萬
+    #    { openType:OPEN_KONG, mahjong:'A02' },                 -- 明槓2萬
+    #    { openType:OPEN_CONCEALED_KONG, mahjong:'B05' },       -- 暗槓5筒
+    #    { openType:OPEN_CHOW, sequence:'C01', mahjong:'C02' }, -- 吃牌組合為 123索, 用13索,吃2索
     # ] 
-    # return: 
-    def checkSelfDesertMahjong( self, onHandMahjong, takeMahjong, openMahjongInfo ):
+    # mahjongBoxNum: 牌盒剩餘的張數, 若牌局快打完時, 能胡就胡
+    # listenMahjongNum: 可以胡牌的牌種數量, 例: 1萬, 2萬, 3萬, 5索, 6索 -- 則傳入 5
+    def checkSelfDiscardMahjong( self, onHandMahjong, takeMahjong, openMahjongInfo, mahjongBoxNum=-1, listenMahjongNum=-1 ):
 
         traceLog = 1
 
@@ -311,26 +344,27 @@ class SimplyMahjongRule(object):
             return  returnData            
        
         #----------------------------------------------------------------------
-
         # 執行到這邊, 代表傳進來的參數都合法
-
-        #----------------------------------------------------------------------
+        #----------------------------------------------------------------------        
 
         saveOnHandMahjong.append( takeMahjong )     # 將摸進的牌加入手上牌
-
         #print("saveOnHandMahjong :", saveOnHandMahjong)
 
         # 計算各牌章的數量
         mahjongCountGroup, jokerNum = self.getMahjongCountGroup( saveOnHandMahjong, False )
 
-        print("mahjongCountGroup :", mahjongCountGroup)
-        print("jokerNum :", jokerNum)
+        if traceLog == 1:
+            print("mahjongCountGroup :", mahjongCountGroup)
+            print("jokerNum :", jokerNum)
+            print("mahjongBoxNum :", mahjongBoxNum)
+            print("listenMahjongNum :", listenMahjongNum)
 
+             
 
         #----------------------------------------------------------------------
 
         # 計數手上牌後, 判斷是否能槓就槓, 賴子不會納入判斷
-        resultKong = self.findOnHandKongMahjong( mahjongCountGroup )
+        resultKong = self.findOnHandKongMahjong( mahjongCountGroup, saveOpenMahjong )
 
         if resultKong[ 'actType' ] != None:
             # 能槓就槓, 直接回傳執行槓牌動作
@@ -338,20 +372,18 @@ class SimplyMahjongRule(object):
             returnData[ 'actMahjongName' ] = resultKong[ 'actMahjongName' ]
             return  returnData
         
-        #----------------------------------------------------------------------        
+        #----------------------------------------------------------------------   
 
         # 將所有牌章積分都先設為0,積分越低,越不會被選到
         mahjongPointList = [ 0 for i in range( len( mahjongCountGroup ) ) ]
 
-        # 將所有牌章積分都先設為0,積分越低,越不會被選到
-        #for i in range( len( mahjongCountGroup ) ):
-        #    if mahjongCountGroup[ i ] == -1:
-        #        mahjongPointList[ i ] = 9999
-
         # 紀錄湊搭的牌組
         splitMahjongInfo = []
 
-        #----------------------------------------------------------------------
+        #----------------------------------------------------------------------           
+        #----------------------------------------------------------------------           
+        #----------------------------------------------------------------------                  
+
 
         '''
         判斷順序:
@@ -372,11 +404,7 @@ class SimplyMahjongRule(object):
             萬筒索單張(無法用賴子湊成刻搭)         -- 積分500
         '''
 
-        #----------------------------------------------------------------------  
-
-        #AAA_Num = 0    # 刻搭數量
-        AAA_Num = len( openMahjongInfo )    # 初始值改為吃碰槓組數
-
+        AAA_Num = len( openMahjongInfo )    # 刻搭初始值 -- 為吃碰槓組數
         Pair_Num = 0   # 對子數量
         
         if traceLog:
@@ -384,29 +412,37 @@ class SimplyMahjongRule(object):
             self.debugMahjongListCountGroup( mahjongCountGroup, 'mahjongCountGroup' )
             self.debugMahjongListCountGroup( mahjongPointList, 'mahjongPointList' )
 
-        #----------------------------------------------------------------------  
+        #----------------------------------------------------------------------           
+        #----------------------------------------------------------------------           
+        #----------------------------------------------------------------------           
 
         # Step 1 : 判斷(字牌)(刻搭) .. 直接給積分
+        bFlag = False
         for i in range( len( MCD.conSuitMahjongRangeMap[MCD.MJ_SUIT_WORD] ) ):
             index = MCD.conSuitMahjongRangeMap[MCD.MJ_SUIT_WORD][ i ]
             if mahjongCountGroup[ index ] == 3:
                 mahjongCountGroup[ index ] -= 3
-                mahjongPointList[ index ] = 10     
+                mahjongPointList[ index ] = 10      # 此牌章積分
                 AAA_Num += 1    # 刻搭數量+1
 
                 tempMahjong = MCD.IndexToMjName[ index ]
                 splitMahjongInfo.append( ['Step1-AAA',tempMahjong,tempMahjong,tempMahjong] )
+                bFlag = True
 
-        if traceLog:
+        if traceLog and bFlag == True:
             print("@@@@ Step 1 @@@@ 字牌刻搭")
             self.debugMahjongListCountGroup( mahjongCountGroup, 'mahjongCountGroup' )
             self.debugMahjongListCountGroup( mahjongPointList, 'mahjongPointList' )
             print("AAA_Num :", AAA_Num)
             print("Pair_Num :", Pair_Num)        
+            print("splitMahjongInfo : ", splitMahjongInfo)
 
-        #----------------------------------------------------------------------
+        #----------------------------------------------------------------------           
+        #----------------------------------------------------------------------           
+        #----------------------------------------------------------------------          
 
         # Step 2 : 判斷(萬筒索)(刻搭) .. 直接給積分
+        bFlag = False
         for i in range( len( MCD.conSuitMahjongRangeMap[MCD.MJ_SUIT_CHAR] ) ):
             index1 = MCD.conSuitMahjongRangeMap[MCD.MJ_SUIT_CHAR][ i ]
             index2 = MCD.conSuitMahjongRangeMap[MCD.MJ_SUIT_DOT][ i ]
@@ -417,51 +453,61 @@ class SimplyMahjongRule(object):
             for index in indexList:
                 if mahjongCountGroup[ index ] == 3:
                     mahjongCountGroup[ index ] -= 3
-                    mahjongPointList[ index ] = 30
+                    mahjongPointList[ index ] = 30    # 此牌章積分
                     AAA_Num += 1    # 刻搭數量+1
 
                     tempMahjong = MCD.IndexToMjName[ index ]
                     splitMahjongInfo.append( ['Step2-AAA',tempMahjong,tempMahjong,tempMahjong] )
+                    bFlag = True
 
-        if traceLog:
+        if traceLog and bFlag == True:
             print("@@@@ Step 2 @@@@ 萬筒索刻搭")
             self.debugMahjongListCountGroup( mahjongCountGroup, 'mahjongCountGroup' )
             self.debugMahjongListCountGroup( mahjongPointList, 'mahjongPointList' )   
             print("AAA_Num :", AAA_Num)
-            print("Pair_Num :", Pair_Num)                                                  
+            print("Pair_Num :", Pair_Num)        
+            print("splitMahjongInfo : ", splitMahjongInfo)    
 
-        #----------------------------------------------------------------------
+        #----------------------------------------------------------------------           
+        #----------------------------------------------------------------------           
+        #----------------------------------------------------------------------                      
 
-        # Step 3 : 判斷(字牌)(對子) .. 會判斷 當下賴子數量足夠湊成刻搭
+        # Step 3 : 判斷(字牌)(對子) .. 會判斷 當下賴子數量足夠湊成刻搭 , 不足就當字牌對子
+        bFlag = False
         for i in range( len( MCD.conSuitMahjongRangeMap[MCD.MJ_SUIT_WORD] ) ):
             index = MCD.conSuitMahjongRangeMap[MCD.MJ_SUIT_WORD][ i ]
             if mahjongCountGroup[ index ] == 2:
+                bFlag = True
                 mahjongCountGroup[ index ] -= 2
                 if jokerNum > 0:
                     jokerNum -= 1
-                    mahjongPointList[ index ] = 50      # 賴子可以湊成刻搭
+                    mahjongPointList[ index ] = 50      # 此牌章積分, 賴子可以湊成刻搭
                     AAA_Num += 1    # 刻搭數量+1
 
                     tempMahjong = MCD.IndexToMjName[ index ]
                     splitMahjongInfo.append( ['Step3-AAA',tempMahjong,tempMahjong,'JK'] )
 
                 else:
-                    mahjongPointList[ index ] = 100      # 賴子不足, 只能當對子(字牌)
+                    mahjongPointList[ index ] = 100      # 此牌章積分, 賴子不足, 只能當對子(字牌)
                     Pair_Num += 1   # 對子數量+1
 
                     tempMahjong = MCD.IndexToMjName[ index ]
                     splitMahjongInfo.append( ['Step3-Pair',tempMahjong,tempMahjong] )                    
 
-        if traceLog:
+        if traceLog and bFlag == True:
             print("@@@@ Step 3 @@@@ 字牌對子")
             self.debugMahjongListCountGroup( mahjongCountGroup, 'mahjongCountGroup' )
             self.debugMahjongListCountGroup( mahjongPointList, 'mahjongPointList' )   
             print("AAA_Num :", AAA_Num)
-            print("Pair_Num :", Pair_Num)             
+            print("Pair_Num :", Pair_Num) 
+            print("splitMahjongInfo : ", splitMahjongInfo)        
 
+        #----------------------------------------------------------------------           
+        #----------------------------------------------------------------------           
         #----------------------------------------------------------------------
 
-        # Step 4 : 判斷(萬筒索)(對子) .. 會判斷 當下賴子數量足夠湊成刻搭
+        # Step 4 : 判斷(萬筒索)(對子) .. 會判斷 當下賴子數量足夠湊成刻搭 , 不足就當一般對子
+        bFlag = False
         for i in range( len( MCD.conSuitMahjongRangeMap[MCD.MJ_SUIT_CHAR] ) ):
             index1 = MCD.conSuitMahjongRangeMap[MCD.MJ_SUIT_CHAR][ i ]
             index2 = MCD.conSuitMahjongRangeMap[MCD.MJ_SUIT_DOT][ i ]
@@ -471,8 +517,8 @@ class SimplyMahjongRule(object):
 
             for index in indexList:
                 if mahjongCountGroup[ index ] == 2:
+                    bFlag = True
                     mahjongCountGroup[ index ] -= 2
-
                     if jokerNum > 0:
                         jokerNum -= 1
                         mahjongPointList[ index ] = 80      # 賴子可以湊成刻搭
@@ -487,23 +533,26 @@ class SimplyMahjongRule(object):
                         tempMahjong = MCD.IndexToMjName[ index ]
                         splitMahjongInfo.append( ['Step4-Pair',tempMahjong,tempMahjong] )                        
 
-        if traceLog:           
+        if traceLog and bFlag == True:
             print("@@@@ Step 4 @@@@ 萬筒索對子")
             self.debugMahjongListCountGroup( mahjongCountGroup, 'mahjongCountGroup' )
             self.debugMahjongListCountGroup( mahjongPointList, 'mahjongPointList' )
             print("AAA_Num :", AAA_Num)
             print("Pair_Num :", Pair_Num)
+            print("splitMahjongInfo : ", splitMahjongInfo)
 
-        #----------------------------------------------------------------------      
+        #----------------------------------------------------------------------           
+        #----------------------------------------------------------------------           
+        #----------------------------------------------------------------------
 
-        # Step 5 : 判斷(字牌)(單張) .. 先直接給積分
+        # Step 5 : 判斷(字牌)(單張) .. 會判斷 當下賴子數量足夠湊成刻搭 或 對子 , 不足就當單張
+        bFlag = False
         for i in range( len( MCD.conSuitMahjongRangeMap[MCD.MJ_SUIT_WORD] ) ):
             index = MCD.conSuitMahjongRangeMap[MCD.MJ_SUIT_WORD][ i ]
             if mahjongCountGroup[ index ] == 1:
-                
+                bFlag = True               
                 mahjongCountGroup[ index ] -= 1
                 mahjongPointList[ index ] = 500
-
                 tempMahjong = MCD.IndexToMjName[ index ]
 
                 matchFlag = False
@@ -524,16 +573,20 @@ class SimplyMahjongRule(object):
                 if matchFlag == False:                    
                     splitMahjongInfo.append( ['Step5-Single',tempMahjong] )
         
-        if traceLog:  
+        if traceLog and bFlag == True:
             print("@@@@ Step 5 @@@@ 字牌單張")
             self.debugMahjongListCountGroup( mahjongCountGroup, 'mahjongCountGroup' )
             self.debugMahjongListCountGroup( mahjongPointList, 'mahjongPointList' )
             print("AAA_Num :", AAA_Num)
-            print("Pair_Num :", Pair_Num)               
-
-        #----------------------------------------------------------------------      
+            print("Pair_Num :", Pair_Num)        
+            print("splitMahjongInfo : ", splitMahjongInfo)         
+        
+        #----------------------------------------------------------------------           
+        #----------------------------------------------------------------------           
+        #----------------------------------------------------------------------
 
         # Step 6 : 判斷(萬筒索)(單張) .. 依序順子靠牌程度來給積分
+        bFlag = False
         for i in range( len( mahjongCountGroup ) ):
 
             if mahjongCountGroup[ i ] <= 0:
@@ -551,6 +604,9 @@ class SimplyMahjongRule(object):
 
             # 單張一般花色
             if mahjongCountGroup[ i ] == 1:
+
+                bFlag = True
+
                 mahjongPointList[ i ] = 550
                 # 取得此牌章可以成順搭的組合
                 # ex : 二筒  [一二三筒]  [二三四筒]
@@ -565,7 +621,7 @@ class SimplyMahjongRule(object):
                     if si == 2:     # 這個位置的牌 就是 mahjongCountGroup[ i ] 的牌章 , 所以不用判斷
                         continue
 
-                    if ABC_Data[ si ] == -1:
+                    if ABC_Data[ si ] == -1:    # 沒有順靠牌的定義位址, 直接跳過
                         continue
 
                     #print("si :", si)
@@ -573,11 +629,11 @@ class SimplyMahjongRule(object):
                     # 判斷是否有鄰近的牌章
                     if mahjongCountGroup[ ABC_Data[ si ] ] > 0:
 
-                        if si == 1 or si == 3:
+                        if si == 1 or si == 3:  # 順跳一
                             #print("si :", si , -20, mahjongName )
                             mahjongPointList[ i ] -= 100
 
-                        if si == 0 or si == 4:
+                        if si == 0 or si == 4:  # 順跳二
                             #print("si :", si , -10, mahjongName )
                             mahjongPointList[ i ] -= 20
 
@@ -599,10 +655,7 @@ class SimplyMahjongRule(object):
                     matchFlag = True
 
                 if matchFlag == False:                    
-                    splitMahjongInfo.append( ['Step6-Single',tempMahjong] )
-
-                                               
-            #print("mahjongPointList : ", mahjongPointList)
+                    splitMahjongInfo.append( ['Step6-Single',tempMahjong] )             
 
         # 清空萬筒索單張的計數值(因為算順搭靠牌時, 不能同時扣除張數)
         for i in range( len( mahjongCountGroup ) ):
@@ -620,21 +673,28 @@ class SimplyMahjongRule(object):
             if mahjongCountGroup[ i ] == 1:
                 mahjongCountGroup[ i ] = 0
 
-        if traceLog:  
+        if traceLog and bFlag == True:  
             print("@@@@ Step 6 @@@@ 萬筒索單張")
             self.debugMahjongListCountGroup( mahjongCountGroup, 'mahjongCountGroup' )
             self.debugMahjongListCountGroup( mahjongPointList, 'mahjongPointList' )
             print("AAA_Num :", AAA_Num)
-            print("Pair_Num :", Pair_Num)                           
+            print("Pair_Num :", Pair_Num)  
+            print("splitMahjongInfo : ", splitMahjongInfo)                         
 
+        #----------------------------------------------------------------------           
+        #----------------------------------------------------------------------           
         #----------------------------------------------------------------------
 
+        # Step 7 : 判斷是否還有剩下賴子牌, 直接兜成刻搭或對子
+        bFlag = False
         if AAA_Num < 4:
             #jokerNum = 5       # 測試
             canAAA_Num = int( jokerNum / 3 )
-            #print("canAAA_Num :", canAAA_Num)            
+            #print("canAAA_Num :", canAAA_Num)    
 
+                    
             for i in range( canAAA_Num ):
+                bFlag = True
                 splitMahjongInfo.append( ['Step7-AAA','JK','JK','JK'] )
 
             AAA_Num += canAAA_Num
@@ -645,6 +705,7 @@ class SimplyMahjongRule(object):
             #print("singleMahjongCnt :", singleMahjongCnt)
 
             if singleMahjongCnt == 0 and jokerNum >= 2:
+                bFlag = True
                 jokerNum -= 2
                 Pair_Num += 1                
                 splitMahjongInfo.append( ['Step7-Pair','JK','JK'] )
@@ -653,23 +714,51 @@ class SimplyMahjongRule(object):
             #    jokerNum -= 1
             #    Pair_Num += 1
 
-        if traceLog:  
+        if traceLog and bFlag == True:  
             print("@@@@ Step 7 @@@@ joker補滿")
             print("AAA_Num :", AAA_Num)
             print("Pair_Num :", Pair_Num)   
+            print("splitMahjongInfo : ", splitMahjongInfo)
 
+        #----------------------------------------------------------------------           
+        #----------------------------------------------------------------------           
+        #----------------------------------------------------------------------
 
-        print("splitMahjongInfo : ", splitMahjongInfo)
-           
+        if traceLog:  
+            print("Final - splitMahjongInfo : ", splitMahjongInfo)
+
+        #----------------------------------------------------------------------           
+        #----------------------------------------------------------------------           
         #----------------------------------------------------------------------
 
         # 最終檢查, 是否滿足可以胡牌的搭子條件 (1個眼睛+4個刻搭)
-
         if AAA_Num == 4 and Pair_Num == 1:
-            returnData[ 'actType' ] = MCD.EXECUTE_SELF_WHO
-            returnData[ 'actMahjongName' ] = takeMahjong
-            return  returnData
+
+            bExecuteSelfWho = False
+
+            # 當下聽牌的牌章種類 超過 設定值要求, 可以胡牌
+            if listenMahjongNum >= self.mahjongListenLimitNum:
+                bExecuteSelfWho = True
+
+            # 沒有設定聽牌數量的限制, 可以直接胡牌
+            if listenMahjongNum == -1:
+                bExecuteSelfWho = True          
+
+            # 當下牌盒剩餘張數, 若沒設定下, 允許直接胡牌
+            if mahjongBoxNum == -1:
+                bExecuteSelfWho = True
+
+            # 有傳入牌盒剩餘張數, 已經達到數量不足的認定, 允許直接胡牌
+            if mahjongBoxNum >= 0 and mahjongBoxNum <= self.mahjongBoxLimitNum:
+                bExecuteSelfWho = True                
+
+            if bExecuteSelfWho == True:
+                returnData[ 'actType' ] = MCD.EXECUTE_SELF_WHO
+                returnData[ 'actMahjongName' ] = takeMahjong
+                return  returnData
         
+        #----------------------------------------------------------------------           
+        #----------------------------------------------------------------------           
         #----------------------------------------------------------------------
 
         # 選一張積分最高的牌, 並回傳(捨牌)
@@ -692,12 +781,7 @@ class SimplyMahjongRule(object):
 
         returnData[ 'actType' ] = MCD.EXECUTE_DISCARD
         returnData[ 'actMahjongName' ] = discardMahjongName
-        return  returnData        
-
-
-
-
-
+        return  returnData                
 
 
 

@@ -132,6 +132,15 @@ mapMahjongNameToHex = {
     'JK1':0x40, 'JK2':0x41, 'JK3':0x42, 'JK4':0x43, 'JK5':0x44, 'JK6':0x45, 'JK7':0x46, 'JK8':0x47, 'EMPTY':0xFF
 }
 
+# 麻將名稱轉Index值
+mapMahjongNameToIndex = {
+    'A01': 0, 'A02': 1, 'A03': 2, 'A04': 3, 'A05': 4, 'A06': 5, 'A07': 6, 'A08': 7, 'A09': 8,
+    'B01': 9, 'B02':10, 'B03':11, 'B04':12, 'B05':13, 'B06':14, 'B07':15, 'B08':16, 'B09':17,
+    'C01':18, 'C02':19, 'C03':20, 'C04':21, 'C05':22, 'C06':23, 'C07':24, 'C08':25, 'C09':26,  
+    'W01':27, 'W02':28, 'W03':29, 'W04':30, 'W05':31, 'W06':32, 'W07':33, 'W08':34, 'W09':35, 'W10':36, 'W11':37, 'W12':38,
+    'JK1':39, 'JK2':40, 'JK3':41, 'JK4':42, 'JK5':43, 'JK6':44, 'JK7':45, 'JK8':46
+}
+
 # 麻將花色定義
 MJ_SUIT_CHAR    = 0x00     # 萬
 MJ_SUIT_DOT     = 0x10     # 筒
@@ -144,6 +153,7 @@ conSuitTypeGroup = ( MJ_SUIT_CHAR, MJ_SUIT_DOT, MJ_SUIT_BAMBOO, MJ_SUIT_WORD, MJ
 # 麻將吃碰槓定義
 OPEN_CHOW = 'Chow'      # 吃牌
 OPEN_PONG = 'Pong'      # 碰牌
+OPEN_ADD_KONG = 'AddKong'   # 碰牌加槓
 OPEN_KONG = 'Kong'      # 明槓
 OPEN_CONCEALED_KONG = 'ConcealedKong'       # 暗槓
 
@@ -190,7 +200,7 @@ conGameRuleMap = {
         # 一般花色定義有哪些, 金勾釣只有萬與索
         'normalSuitGroup' : [ MJ_SUIT_CHAR, MJ_SUIT_BAMBOO ],
 
-        'openTypeGroup' : [ OPEN_PONG, OPEN_KONG, OPEN_CONCEALED_KONG, OPEN_CHOW ],        # 允許的吃碰槓類型
+        'openTypeGroup' : [ OPEN_PONG, OPEN_KONG, OPEN_CONCEALED_KONG ],        # 允許的吃碰槓類型
 
             
     }
